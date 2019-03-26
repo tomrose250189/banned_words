@@ -1,3 +1,4 @@
+from __future__ import print_function
 import sys
 import re
 
@@ -33,7 +34,7 @@ def one_pass_censor(censor_words_file_location, text_file_location, lines_per_it
 				# Replace censor word "" "". Lookahead and lookbehind regexs are required to avoid overlapping matches, 
 				# meaning not all occurrences of censor words are removed from a line.
 				repl_lines = re.sub(r'(?<=\W)'+cw+r'(?=\W)', repl_cw, repl_lines, flags=re.IGNORECASE) 
-			print(repl_lines)
+			print(repl_lines, end='')
 
 def censor(censor_words_file_location, text_file_location, lines_per_iteration, censor_words_one_pass=False):
 	"""This function reads 'lines_per_iteration' lines of the text file at a time. If 'censor_words_one_pass' is true,
@@ -41,7 +42,7 @@ def censor(censor_words_file_location, text_file_location, lines_per_iteration, 
 	requiring multiple re-reads of the same word for different groups of text file lines.
 	The groups of text file lines then have every character of a contained censor word replaced with '*' using the re.sub 
 	function. After all censor words have been substituted in the group of text file lines, they are printed to stdout."""
-	if censor_words_one_pass == True:
+	if censor_words_one_pass:
 		return one_pass_censor(censor_words_file_location, text_file_location, lines_per_iteration)
 	with open(text_file_location, 'r') as tf, open(censor_words_file_location, 'r') as cwf:
 		repl_lines = True # Initial condition required to enter while loop to start reading text file
@@ -64,7 +65,7 @@ def censor(censor_words_file_location, text_file_location, lines_per_iteration, 
 				# Replace censor word "" "". Lookahead and lookbehind regexs are required to avoid overlapping matches, 
 				# meaning not all occurrences of censor words are removed from a line.
 				repl_lines = re.sub(r'(?<=\W)'+cw+r'(?=\W)', repl_cw, repl_lines, flags=re.IGNORECASE)
-			print(repl_lines)
+			print(repl_lines, end='')
 			# Go back to the top of the censor words file after the end is reached, so that it can be read again for the next group of text
 			# file lines			
 			cwf.seek(0) 
