@@ -1,55 +1,73 @@
 import sys
 import re
-import multiprocessing
-import sys
- 
 
-def replace_words(arg):
-	repl_line = arg[0]
-	censor_words = arg[1]
-	for cw, lcw in censor_words: # for each censor word read from the censor word file
-		repl_cw = '*'*lcw
-		# find and replace censor word (case insensitive) with appropriate number of *s when it occurs at the 
-		# start of a line.
-		repl_line = re.sub(r'^'+cw+r'(?=\W)', repl_cw, repl_line, flags=re.IGNORECASE)
-		# replace censor word "" "". Lookahead and lookbehind regexs are required to avoid overlapping matches, 
-		# meaning not all occurrences of censor words are removed from a line.
-		repl_line = re.sub(r'(?<=\W)'+cw+r'(?=\W)', repl_cw, repl_line, flags=re.IGNORECASE)
-	return repl_line
 
-def censor(censor_words_file_location, text_file_location, mp=True):
-	"""This function creates a list of censor words from the censor word file. It then reads each line of the text file, 
-	substituting any letters of a censor word found with a '*'. The resultant line is printed out to stdout. This process 
-	finishes when the end of the end of the text file is reached."""
+def one_pass_censor(censor_words_file_location, text_file_location, lines_per_iteration):
+	"""This function creates a list of censor words from the censor word file. It then reads 'lines_per_iteration' lines of the text file, 
+	substituting all letters of a censor word with a '*'. The resultant lines are printed out to stdout. This process finishes when the end 
+	of the text file is reached."""
 	with open(censor_words_file_location, 'r') as cwf:
-		cores = multiprocessing.cpu_count() if mp else 1
-		censor_words = [[] for _ in range(cores)]
-		i = 0
+		censor_words = []
 		while True:
-			cw = cwf.readline().rstrip() # remove newline and trailing whitespace
+			cw = cwf.readline().rstrip() # Remove newline and trailing whitespace
 			if cw == '':
 				break # Keep reading until the end of the censor word file
-			censor_words[i].append((cw, len(cw)))
-			i = (i + 1) % cores
+			censor_words.append((cw, len(cw))) # Include the length in a tuple so it doesn't need to keep be recalculated
 	with open(text_file_location, 'r') as tf:
-		pool = multiprocessing.Pool(cores)
-		while True:
-			repl_line = tf.readline()
-			if repl_line == '':
-				break # stop reading at eof
-			if mp:
-				res = pool.map(replace_words, [[repl_line, censor_words[i]] for i in range(cores)])
-				repl_line = ''
-				for i in xrange(len(res[0])):
-					for j in range(cores):
-						if(res[j][i] == '*'):
-							repl_line += '*'
-							break
-					else:	
-						repl_line += res[0][i]
-			else:
-				repl_line = replace_words([repl_line, censor_words[0]])
-			print(repl_line)
+		repl_lines = True # Initial condition required to enter while loop to start reading text file
+		while repl_lines: # Keep reading whilst there are replacement lines to search for censor words in
+			repl_lines = []
+			for _ in range(lines_per_iteration): # Ensure that repl_lines.size() <= lines_per_iteration
+				line = tf.readline()
+				if line == '':
+					break # Stop reading at eof
+				repl_lines.append(line)
+			repl_lines = "".join(repl_lines) # Transform list of lines back into multi-line string
+			if repl_lines == "": # Return if end of text file is reached
+				return
+			for cw, lcw in censor_words: # for each censor word read from the censor word file
+				repl_cw = '*'*lcw
+				# Find and replace censor word (case insensitive) with appropriate number of *s when it occurs at the 
+				# start of a line.
+				repl_lines = re.sub(r'^'+cw+r'(?=\W)', repl_cw, repl_lines, flags=re.IGNORECASE)
+				# Replace censor word "" "". Lookahead and lookbehind regexs are required to avoid overlapping matches, 
+				# meaning not all occurrences of censor words are removed from a line.
+				repl_lines = re.sub(r'(?<=\W)'+cw+r'(?=\W)', repl_cw, repl_lines, flags=re.IGNORECASE) 
+			print(repl_lines)
+
+def censor(censor_words_file_location, text_file_location, lines_per_iteration, censor_words_one_pass=False):
+	"""This function reads 'lines_per_iteration' lines of the text file at a time. If 'censor_words_one_pass' is true,
+	all censor words are read once and put into a list, otherwise if false they are read one at a time, saving memory but
+	requiring multiple re-reads of the same word for different groups of text file lines.
+	The groups of text file lines then have every character of a contained censor word replaced with '*' using the re.sub 
+	function. After all censor words have been substituted in the group of text file lines, they are printed to stdout."""
+	if censor_words_one_pass == True:
+		return one_pass_censor(censor_words_file_location, text_file_location, lines_per_iteration)
+	with open(text_file_location, 'r') as tf, open(censor_words_file_location, 'r') as cwf:
+		repl_lines = True # Initial condition required to enter while loop to start reading text file
+		while repl_lines: # Keep reading whilst there are replacement lines to search for censor words in
+			repl_lines = []
+			for _ in range(lines_per_iteration): # Ensure that repl_lines.size() <= lines_per_iteration
+				line = tf.readline()
+				if line == '':
+					break # Stop reading at eof
+				repl_lines.append(line)
+			repl_lines = "".join(repl_lines) # Transform list of lines back into multi-line string
+			while repl_lines:
+				cw = cwf.readline().rstrip() # Remove newline and trailing whitespace
+				if cw == '':
+					break # Keep reading until the end of the censor word file
+				repl_cw = '*'*len(cw)
+				# Find and replace censor word (case insensitive) with appropriate number of *s when it occurs at the 
+				# start of a line.
+				repl_lines = re.sub(r'^'+cw+r'(?=\W)', repl_cw, repl_lines, flags=re.IGNORECASE)
+				# Replace censor word "" "". Lookahead and lookbehind regexs are required to avoid overlapping matches, 
+				# meaning not all occurrences of censor words are removed from a line.
+				repl_lines = re.sub(r'(?<=\W)'+cw+r'(?=\W)', repl_cw, repl_lines, flags=re.IGNORECASE)
+			print(repl_lines)
+			# Go back to the top of the censor words file after the end is reached, so that it can be read again for the next group of text
+			# file lines			
+			cwf.seek(0) 
 		
 if __name__ == "__main__":
 	# Command line input count test
@@ -60,4 +78,4 @@ if __name__ == "__main__":
 	censor_words_file_location = sys.argv[1]
 	text_file_location = sys.argv[2]
 	# Main censor functionality
-	censor(censor_words_file_location, text_file_location, mp=True)
+	censor(censor_words_file_location, text_file_location, lines_per_iteration=200, censor_words_one_pass=False)
